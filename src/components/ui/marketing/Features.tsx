@@ -1,30 +1,20 @@
-"use client";
-
-type Feature = { title: string; desc: string };
-type FeaturesDict = {
-  title: string;
-  f1: Feature;
-  f2: Feature;
-  f3: Feature;
-};
+import type { FeaturesDict } from "@/i18n/getDict";
 
 export default function Features({ t }: { t: FeaturesDict }) {
-  const items: Feature[] = [t.f1, t.f2, t.f3];
-
   return (
-    <div className="space-y-8">
-      <h2 className="text-2xl md:text-3xl font-semibold">{t.title}</h2>
-      <div className="grid md:grid-cols-3 gap-6">
-        {items.map((it, i) => (
-          <article
+    <div className="mx-auto max-w-6xl px-4">
+      <h2 className="text-xl text-slate-200 mb-6">{t.title}</h2>
+      <ul className="grid gap-4 md:grid-cols-3">
+        {[t.f1, t.f2, t.f3].map((f, i) => (
+          <li
             key={i}
-            className="rounded-2xl border border-white/10 p-5 bg-[rgba(15,22,33,0.6)] backdrop-blur hover:bg-white/[.07] transition"
+            className="rounded-2xl border border-white/10 bg-white/5 p-5"
           >
-            <h3 className="font-medium">{it.title}</h3>
-            <p className="mt-2 text-slate-300 text-sm">{it.desc}</p>
-          </article>
+            <div className="text-base font-medium">{f.title}</div>
+            <p className="text-sm text-slate-400 mt-1">{f.desc}</p>
+          </li>
         ))}
-      </div>
+      </ul>
     </div>
   );
 }

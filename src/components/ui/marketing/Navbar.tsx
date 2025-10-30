@@ -1,86 +1,76 @@
 "use client";
-
 import Link from "next/link";
 import Image from "next/image";
-import { usePathname, useRouter } from "next/navigation";
-import { type Locale } from "@/i18n/locales";
+import { usePathname } from "next/navigation";
 
-type NavDict = {
-  about: string;
-  recipes: string;
-  blog: string;
-  login: string;
-  signup: string;
+const LOGO =
+  "https://res.cloudinary.com/dtb3gqeea/image/upload/v1747740721/logo_sweatMate_vy8s1z.png";
+
+type NavbarProps = {
+  locale?: "en" | "es";
+  // lo dejamos flexible para que acepte lo que venga de dict.nav
+  t?: Record<string, string>;
 };
 
-export default function Navbar({ locale, t }: { locale: Locale; t: NavDict }) {
-  const pathname = usePathname();
-  const router = useRouter();
+export default function Navbar({ locale: localeFromProps, t }: NavbarProps) {
+  const pathname = usePathname() || "/";
 
-  // switcher simple: /en/... ↔︎ /es/...
-  const onSwitch = () => {
-    const parts = (pathname || "/en").split("/");
-    parts[1] = locale === "en" ? "es" : "en";
-    router.push(parts.join("/") || `/${locale === "en" ? "es" : "en"}`);
+  const [maybeLocale] = pathname.split("/");
+  const detectedLocale = maybeLocale?.length === 2 ? maybeLocale : "en";
+  const locale = localeFromProps || (detectedLocale as "en" | "es");
+
+  // si no viene en el dict, caemos al texto por defecto
+  const labels = {
+    home: t?.home ?? "Home",
+    about: t?.about ?? "About",
+    blog: t?.blog ?? "Blog",
+    recipes: t?.recipes ?? "Recipes",
   };
+
+  const navLink = (href: string, label: string) => (
+    <Link
+      href={`/${locale}${href}`}
+      className="text-sm text-text-secondary hover:text-white transition"
+    >
+      {label}
+    </Link>
+  );
 
   return (
     <header className="sticky top-0 z-20 bg-[rgba(11,15,20,0.6)] backdrop-blur border-b border-white/5">
-      <div className="mx-auto max-w-6xl px-4 py-3 flex items-center justify-between">
-        <Link href={`/${locale}`} className="flex items-center gap-2">
+      <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
+        <Link href={`/${locale}`} className="flex items-center gap-3">
           <Image
-            src="https://res.cloudinary.com/dtb3gqeea/image/upload/v1747740721/logo_sweatMate_vy8s1z.png"
+            src={LOGO}
             alt="SweatMate"
-            width={28}
-            height={28}
-            className="rounded"
+            width={36}
+            height={36}
+            priority
+            className="rounded-md"
           />
-          <span className="font-semibold">SweatMate</span>
+          <span className="text-sm text-text-secondary">SweatMate</span>
         </Link>
 
-        <nav className="hidden md:flex items-center gap-6 text-sm text-slate-300">
-          <Link
-            className="hover:text-white transition"
-            href={`/${locale}/about`}
-          >
-            {t.about}
-          </Link>
-          <Link
-            className="hover:text-white transition"
-            href={`/${locale}/recipes`}
-          >
-            {t.recipes}
-          </Link>
-          <Link
-            className="hover:text-white transition"
-            href={`/${locale}/blog`}
-          >
-            {t.blog}
-          </Link>
+        <nav className="hidden md:flex items-center gap-6">
+          {navLink("/", labels.home)}
+          {navLink("/about", labels.about)}
+          {navLink("/recipes", labels.recipes)}
+          {navLink("/blog", labels.blog)}
         </nav>
 
         <div className="flex items-center gap-2">
           <Link
-            href={`/${locale}/auth/login`}
-            className="rounded-full border border-white/10 px-3 py-1.5 text-xs hover:bg-white/5 transition"
+            href={`/${locale}/login`}
+            className="px-4 py-2 text-sm rounded-xl border border-white/10 hover:bg-white/5 transition"
           >
-            {t.login}
+            Log in
           </Link>
           <Link
-            href={`/${locale}/auth/signup`}
-            className="rounded-full bg-white/10 hover:bg-white/20 px-3 py-1.5 text-xs transition"
+            href={`/${locale}/signup`}
+            className="px-4 py-2 text-sm rounded-xl bg-accent hover:bg-accent-soft transition"
           >
-            {t.signup}
+            Sign up
           </Link>
-
-          {/* Switcher */}
-          <button
-            onClick={onSwitch}
-            aria-label="Switch language"
-            className="ml-2 rounded-md border border-white/10 px-2 py-1 text-xs text-slate-200 hover:bg-white/5"
-          >
-            {locale === "en" ? "ES" : "EN"}
-          </button>
         </div>
       </div>
     </header>

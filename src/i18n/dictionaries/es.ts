@@ -1,6 +1,7 @@
-const es = {
-  brand: "SweatMate",
-  tagline: "Tu compañero fitness",
+// src/i18n/dictionaries/es.ts
+import type { MarketingDict } from "../getDict";
+
+const es: MarketingDict = {
   nav: {
     about: "Sobre nosotros",
     recipes: "Recetas",
@@ -9,18 +10,29 @@ const es = {
     signup: "Crear cuenta",
   },
   hero: {
-    title: "Entrena más inteligente. Siéntete mejor.",
-    subtitle:
-      "Planes, seguimiento y coaching en un panel moderno hecho para ti.",
-    cta: "Empieza gratis",
-    cta2: "Ver cómo funciona",
+    headlines: [
+      "Entrena más inteligente. Siéntete mejor.",
+      "Planifica menos. Muévete más.",
+      "Coaching que escala contigo.",
+      "Todo tu progreso en un solo lugar.",
+    ],
+    subtitle: "Planes, registro y coaching en un panel elegante hecho para ti.",
   },
   features: {
     title: "Por qué SweatMate",
-    f1: { title: "Planes adaptativos", desc: "Programas que crecen contigo." },
-    f2: { title: "CRM de clientes", desc: "Para entrenadores y estudios." },
-    f3: { title: "Calendario y KPIs", desc: "Sigue tu progreso sin fricción." },
+    f1: {
+      title: "Planes adaptativos",
+      desc: "Programas que crecen con tu progreso.",
+    },
+    f2: {
+      title: "Tracking inteligente",
+      desc: "Sesiones y métricas unificadas.",
+    },
+    f3: {
+      title: "Bandeja del coach",
+      desc: "Chat, feedback y revisiones, organizados.",
+    },
   },
-} as const;
+};
 
 export default es;

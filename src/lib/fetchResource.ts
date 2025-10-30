@@ -1,19 +1,29 @@
 // src/lib/fetchResource.ts
 import { getUserToken, setUserToken, clearUserToken } from "./auth";
 
-/** HTTP methods admitidos */
+/** Métodos HTTP soportados */
 export type HTTPMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
-/** Error normalizado para respuestas HTTP o fallos de red */
+/** Opciones para fetchResource */
+export type FetchOptions<TBody = unknown> = {
+  /** Si true, NO enviamos Authorization */
+  noAuth?: boolean;
+  /** Query string como objeto simple (se aplanan primitivos) */
+  query?: Record<string, string | number | boolean | null | undefined>;
+  /** Cuerpo; si es FormData lo enviamos tal cual, si es objeto lo serializamos a JSON */
+  body?: TBody | FormData;
+  /** Headers extra (se mezclan con los nuestros) */
+  headers?: Record<string, string>;
+};
+
+/** Error normalizado para todas las peticiones */
 export class ApiError extends Error {
   status: number | "NETWORK_ERROR";
-  data: any;
+  data: unknown;
 
-  constructor(status: number | "NETWORK_ERROR", data: any) {
+  constructor(status: number | "NETWORK_ERROR", data: unknown) {
     super(
-      status === "NETWORK_ERROR"
-        ? "Network error"
-        : `API request failed with status ${status}`
+      status === "NETWORK_ERROR" ? "Network error" : `API error: ${status}`
     );
     this.name = "ApiError";
     this.status = status;
@@ -21,102 +31,98 @@ export class ApiError extends Error {
   }
 }
 
-/**
- * Opciones del fetch propio.
- * Hacemos body más laxo (any) porque nosotros serializamos a JSON
- * si no es FormData.
- */
-type Options = Omit<RequestInit, "body" | "method" | "headers"> & {
-  body?: any;
-  headers?: Record<string, string>;
-  /** Si true, no adjuntamos Authorization */
-  noAuth?: boolean;
-};
+/* ------------------------------- helpers ------------------------------- */
+
+function buildSearchParams(query?: FetchOptions["query"]): string {
+  if (!query) return "";
+  const sp = new URLSearchParams();
+  for (const [k, v] of Object.entries(query)) {
+    if (v === undefined || v === null) continue;
+    sp.set(k, String(v));
+  }
+  const qs = sp.toString();
+  return qs ? `?${qs}` : "";
+}
+
+/** Detecta FormData sin usar `any` ni directivas */
+function isFormData(x: unknown): x is FormData {
+  if (typeof FormData === "undefined") return false;
+  return x instanceof FormData;
+}
+
+/** Intenta parsear JSON; si falla, devuelve null */
+async function safeJson<T = unknown>(res: Response): Promise<T | null> {
+  const text = await res.text();
+  if (!text) return null;
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    return null;
+  }
+}
+
+/* ------------------------------ función core ------------------------------ */
 
 /**
- * Base URL:
- * - Si defines NEXT_PUBLIC_BASE_URL (p.ej. en producción), se usa esa.
- * - Si no, usamos /api (pasará por el proxy/rewrite de Next para evitar CORS).
+ * `fetchResource` centraliza llamadas a `/api/*`.
+ * - Añade Authorization con el token del usuario (salvo `noAuth`).
+ * - Serializa body (FormData pasa tal cual).
+ * - Si la respuesta incluye `token`, lo guarda con `setUserToken`.
  */
-const BASE =
-  (process.env.NEXT_PUBLIC_BASE_URL || "/api").replace(/\/+$/, "");
-
-/** Pequeña utilidad para unir rutas sin dobles barras */
-const join = (base: string, path: string) =>
-  `${base}/${String(path || "").replace(/^\/+/, "")}`;
-
-/**
- * fetchResource:
- * - Adjunta token (Authorization) salvo que uses { noAuth: true }
- * - Serializa JSON automáticamente si body es objeto (no FormData)
- * - Maneja errores de red y HTTP devolviendo ApiError
- * - Refresca token si el backend devuelve { token }
- * - Es genérico: fetchResource<T>(...)
- */
-export default async function fetchResource<T = unknown>(
+export default async function fetchResource<TResult = unknown, TBody = unknown>(
   method: HTTPMethod,
   path: string,
-  options: Options = {}
-): Promise<T> {
-  const url = join(BASE, path);
+  opts: FetchOptions<TBody> = {}
+): Promise<TResult> {
+  const { noAuth, query, body, headers } = opts;
 
-  const isFormData = options.body instanceof FormData;
-  const token = getUserToken();
+  const url = `/api/${path.replace(/^\/+/, "")}${buildSearchParams(query)}`;
 
-  const headers: Record<string, string> = {
-    // Solo establecemos JSON si NO es FormData
-    ...(!isFormData && { "Content-Type": "application/json" }),
-    // Adjuntamos Authorization si hay token y no se pidió noAuth
-    ...(token && !options.noAuth ? { Authorization: `Bearer ${token}` } : {}),
-    ...(options.headers || {}),
-  };
+  const finalHeaders = new Headers({
+    Accept: "application/json",
+    ...headers,
+  });
 
-  const config: RequestInit = {
-    method,
-    ...options,
-    headers,
-  };
-
-  // Serializamos JSON si body es un objeto "plano" (no FormData)
-  if (
-    config.body &&
-    typeof config.body === "object" &&
-    !(config.body instanceof FormData)
-  ) {
-    config.body = JSON.stringify(config.body);
+  // Solo ponemos Content-Type si NO es FormData
+  let payload: BodyInit | undefined;
+  if (isFormData(body)) {
+    payload = body;
+  } else if (body !== undefined) {
+    finalHeaders.set("Content-Type", "application/json");
+    payload = JSON.stringify(body);
   }
 
-  // ---- fetch real
+  // Authorization
+  if (!noAuth) {
+    const token = getUserToken();
+    if (token) finalHeaders.set("Authorization", `Bearer ${token}`);
+  }
+
   let res: Response;
   try {
-    res = await fetch(url, config);
-  } catch (err: any) {
-    // Error de red / CORS / DNS, etc.
-    throw new ApiError("NETWORK_ERROR", { message: err?.message ?? String(err) });
-  }
-
-  // Intentamos parsear el cuerpo como JSON, pero lo tratamos como opcional
-  let data: any = null;
-  try {
-    data = await res.json();
+    res = await fetch(url, {
+      method,
+      headers: finalHeaders,
+      body: payload,
+    });
   } catch {
-    // Respuesta sin JSON (204, o texto vacío) → data queda en null
+    throw new ApiError("NETWORK_ERROR", null);
   }
 
-  // Si 401, limpiamos token (si se usó auth) y lanzamos error
-  if (res.status === 401 && !options.noAuth) {
-    clearUserToken();
+  // Intentamos parsear json (sea OK o error)
+  const data = await safeJson<unknown>(res);
+
+  // Si nos devuelven `token`, lo guardamos
+  if (data && typeof data === "object" && "token" in data) {
+    const token = (data as { token?: string }).token;
+    if (token) setUserToken(token);
   }
 
   if (!res.ok) {
-    // Lanza ApiError con el status real y el payload (si lo hay)
+    // 401 → opcional: limpiar token
+    if (res.status === 401) clearUserToken();
     throw new ApiError(res.status, data);
   }
 
-  // Si el backend devuelve un token (login, refresh, etc.), lo persistimos
-  if (data && typeof data === "object" && data.token) {
-    setUserToken(data.token);
-  }
-
-  return data as T;
+  return (data as TResult | null) ?? (undefined as unknown as TResult);
 }
